@@ -76,6 +76,7 @@ PS：这里假设控制节点的IP是162.105.133.146，口令须与之前数据�
 
 ### 创建各种tenants，users，roles   
 此步涉及大量重复工作，如果人工执行命令很不人道，所以使用官方脚本：
+
     #!/usr/bin/env bash
     
     # Copyright 2013 OpenStack LLC
@@ -298,16 +299,365 @@ PS：这里假设控制节点的IP是162.105.133.146，口令须与之前数据�
     ADMIN_SECRET=$ADMIN_SECRET
     EOF
 PS：脚本中所有endpoint地址都是127.0.0.1，此外用户名和密码也是默认的，建议修改后再执行
-8. troubleshooting   
-- 随便执行几个keystone命令，比如:
-     keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://162.105.133.146:35357/v2.0 token-get   
+
+### troubleshooting   
+- 随便执行几个keystone命令，比如: keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://162.105.133.146:35357/v2.0 token-get   
 - 查看/var/log/keystone/路径下的日志文件（如果没有开启debug选项的话此时应该是空）
 - 如果日志有异常可以在命令中增加-debug选项查看debug信息   
-- 为便于运行keystone命令，可以创建一个keystonerc文件，具体内容：
-     export OS_USERNAME=admin   
-     export OS_PASSWORD=Ops146   
-     export OS_TENANT_NAME=demo   
-     export OS_AUTH_URL=http://162.105.133.146:35357/v2.0
+
+### 为便于运行keystone命令，可以创建一个keystonerc文件一次性导入所需环境变量，内容如下：
+    export OS_USERNAME=admin   
+    export OS_PASSWORD=Ops146   
+    export OS_TENANT_NAME=demo   
+    export OS_AUTH_URL=http://162.105.133.146:35357/v2.0
+
+
+## 安装和配置ImageService
+
+### 安装image服务glance
+    # yum install openstack-nova openstack-glance   
+    # rm /var/lib/glange/glance.sqlite
+
+### 创建数据库
+     # mysql -uroot -p
+     mysql> CREATE DATABSE glance;   
+     mysql> GRANT ALL ON glance.* TO 'glance'@'%' IDENTIFIED BY 'glance';   
+     mysql> GRANT ALL ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'glance';   
+     mysql> GRANT ALL ON glance.* TO 'glance'@'Ops146' IDENTIFIED BY 'glance';
+     mysql> \q   
+
+### 编辑glance配置文件和paste.ini中间件文件     
+
+#### 更新 */etc/glance/glance-api-paste.ini* ，修改[filter:authtoken]下的admin_*变量：   
+     [filter:authtoken]   
+     admin_tenant_name = service   
+     admin_user = glance   
+     admin_password = glance   
+     
+#### 在 */etc/glance/glance-api.conf* 最后添加下述内容：   
+     [keystone_authtoken]   
+     auth_host = 127.0.0.1   
+     auth_port = 35357   
+     auth_protocol = http   
+     admin_tenant_name = service   
+     admin_user = glance   
+     admin_password = glance   
+  
+     [paste_deploy]   
+     # Name of the paste configuration file that defines the available pipelines config_file = /etc/glance/glance-api-paste.ini
+   
+     # Partial name of a pipeline in your paste configuration file with the  
+     # service name removed. For example, if your paste section name is   
+     # [pipeline:glance-api-keystone], you would configure the flavor below   
+     # as 'keystone'.   
+     flavor = keystone  
+     
+#### 确保 */etc/glance/glance-api.conf* 指向MySQL而不是sqlite   
+     sql_connection = mysql://glance:glance@162.105.133.146/glance   
+     
+#### 更新 */etc/glance/glance-registry.conf* 最后一段，通过设置flavor=keystone来启用认证服务   
+     [keystone_authtoken]   
+     auth_host = 127.0.0.1   
+     auth_port = 35357   
+     auth_protocol = http   
+     admin_tenant_name = service   
+     admin_user = glance   
+     admin_password = glance   
+   
+     [paste_deploy]   
+     # Name of the paste configuration file that defines the available pipelines config_file = /etc/glance/glance-registry-paste.ini   
+        
+     # Partial name of a pipeline in your paste configuration file with the   
+     #service name removed. For example, if your paste section name is   
+     # [pipeline:glance-api-keystone], your would configure the flavor below 
+     # as 'keystone'.   
+     flavor = keystone  
+     
+#### 更新 */etc/glance/glance-registry-paste.ini* 
+     # Use this pipeline for keystone auth   
+     [pipeline:glance-registry-keystone]   
+     pipeline = authtoken contex registryapp   
+     
+#### 确保 */etc/glance/glance-registry.conf* 指向的是MySQL而不是sqlite：
+     sql_connection = mysql://glance:glance@162.105.133.146/glance 
+     
+### 重启glance服务使配置生效
+    # service openstack-glance-registry restart  
+    
+### 初始化glance库
+     glance-manage db_sync   
+     
+### 重启glance-registry和glance-api服务
+     service openstack-glance-registry restart   
+     service openstack-glance-api restart   
+
+### Troubleshooting   
+- 查看/var/log/glance路径下的各种log文件,确保没有ERROR  
+- 随意执行几个glance命令，例如：glance image-list
+
+### 进一步验证image服务是否正常 
+
+#### 下载一个测试image
+    # mkdir /root/images   
+    # cd /root/images/   
+    # wget http://smoser.brickies.net/ubuntu/ttylinux-uec/ttylinux-uec-amd64-12.1_2.6.35-22_1.tar.gz   
+    # tar -zxvf ttylinux-uec-amd64-12.1_2.6.35-22_1.tar.gz   
+    
+#### 创建openrc文件，便于执行命令：（注：这里的密码必须和sample_data.sh中创建的一致）
+    export OS_USERNAME=admin   
+    export OS_TENANT_NAME=demo   
+    export OS_PASSWORD=Ops146   
+    export OS_AUTH_URL=http://162.105.133.146:5000/v2.0/   
+    export OS_REGION_NAME=RegionOne   
+     
+#### 加载kernel  
+    # glance image-create --name="tty-linux-kernel" --is-public true --disk-format=aki --container-format=aki < ttylinux-uec-amd64-12.1_2.6.35-22_1-vmlinuz，下面的命令都默认采用这种精简后的指令
+PS：需要记住命令执行后返回的id，后面要用到
+    
+#### 加载initrd   
+    # glance image-create --name="tty-linux-ramdisk" --is-public true --disk-format=ari --container-format=ari < ttylinux-uec-amd64-12.1_2.6.35-22_1-loader   
+PS：同样要记住命令执行后返回的id，后面要用到
+
+#### 加载image
+这里填入之前2步的id
+    # glance image-create --name="tty-linux" --is-public true --disk-format=ami --property kernel_id=cb77fbcf-89f4-441f-9ffb-47f3d045f445 --property ramdisk_id=e17e50b0-b7b3-474b-ac94-a861853bdb9b < ttylinux-uec-amd64-12.1_2.6.35-22_1.img 
+
+#### 验证   
+    # glance image-list  
+这里应该会出现刚才加载的3个img，并且都是ACTIVE状态  
+PS：这里官方文档上的教程有误，其文档中在执行image-create的时候没有指定--is-public，同时也没有指定owner，所以创建完毕后用glance image-list是看不到的，因为image没有owner而且是private的。（从官方文档的截图来看，虽然其没有指定--is-public但是是有owner的，但是根据我的实验，使用官方文档中的命令create的image的owner是NULL）这里的image-create命令已经做的修改，增加了--is-public true选项。
+
+
+## 配置管理器
+管理器分为KVM和Xen-based，KVM运行在libvirt上，Xen运行在XenAPI上   
+KVM是Compute服务默认的管理器（这里暂时只考虑KVM，其他的先不考虑）
+为了打开KVM支持，需要在/etc/nova/nova.conf中添加如下配置项： （后面提供的nova.conf配置文件已包含，这里不用配置） 
+     compute_driver=libvirt.LibvirtDriver   
+     libvirt_type=kvm   
+检查硬件是否支持虚拟化
+     egrep '(vmx|svm)' --color=always /proc/cpuinfo   
+检查是否加载KVM模块，如果输出中有kvm则说明已经加载
+     lsmod | grep kvm
+注意！这里的TroubleShooting需要运行一个实例才能得到结论，不过到目前为止还不知道如何运行一个实例，所以官方文档写的不太清楚
+安装libvirt的一些东西，如果不执行则libvirt无法启动：
+yum -y install avahi
+service messagebus start
+service avahi-daemon start
+service libvirtd start
+
+
+## 网络预配置
+1. 将网卡设置为混杂模式，这样就能接收到虚拟机发送的数据包了
+     ip link set em2 promisc on
+上一步的命令也可以用ifconfig em2 promisc来实现，执行完毕后用ifconfig em2检查是否包含PROMISC标志
+2. 创建网桥
+创建文件/etc/sysconfig/network-scrips/ifcfg-br100：
+     DEVICE=br100
+     TYPE=Bridge
+     ONBOOT=yes
+     DELAY=0
+     BOOTPROTO=static
+     IPADDR=192.168.100.1
+     NETMASK=255.255.255.0
+安装网桥工具
+     yum install bridge-utils
+建立网桥（官网上提到了，一定要先建立网桥）
+     brctl addbr br100
+重启使配置生效（这里官网写成networking了，应该是network）
+     /etc/init.d/network restart
+
+
+## 其他配置
+1. 确保/etc/qpidd.conf文件中auth=no
+2. 将selinux设置为许可模式
+     setenforce permissive
+3. 安装dnsmasq工具
+     yum install dnsmasq-utils
+4. 如果guest镜像没有单一的分区，则需要设置一下（这个不太明白）
+     openstack-config --set /etc/nova/nova.conf DEFAULT libvirt_inject_partition -1（后面提供的nova.conf文件已包含，这里不用执行）
+
+
+## 配置控制节点的SQL数据库
+进入SQL
+     mysql -uroot -p
+然后执行如下命令
+     CREATE DATABASE nova;
+     GRANT ALL ON nova.* TO 'nova'@'%' IDENTIFIED BY 'nova';
+     GRANT ALL ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'nova';
+     GRANT ALL ON nova.* TO 'nova'@'Ops146' IDENTIFIED BY 'nova';
+     quit
+
+
+## 安装并配置Cloud Controller
+1. 安装nova
+     yum -y install openstack-nova
+2. 配置nova（nova.conf实在太庞大了）
+确保sql_connection=mysql://[user]:[pass]@[primary_ip]/[db name]，例如
+     sql_connection=mysql://nova:nova@162.105.133.146/nova
+添加如下配置项：
+auth_strategy=keystone
+network_manager=nova.network.manager.FlatDHCPManager
+fixed_range=192.168.100.0/24
+public_interface=em2
+flat_interface=em2
+flat_network_bridge=br100
+下面有一份nova.conf的样例：（注意要修改其中的ip以及password）
+[DEFAULT]
+
+# LOGS/STATE
+verbose=True
+logdir=/var/log/nova
+state_path=/var/lib/nova
+lock_path=/var/lock/nova
+rootwrap_config=/etc/nova/rootwrap.conf
+
+# SCHEDULER
+compute_scheduler_driver=nova.scheduler.filter_scheduler.FilterScheduler
+
+# VOLUMES
+volume_driver=nova.volume.driver.ISCSIDriver
+volume_group=nova-volumes
+volume_name_template=volume-%s
+iscsi_helper=tgtadm
+
+# DATABASE
+sql_connection=mysql://nova:nova@162.105.133.146/nova
+
+# COMPUTE
+libvirt_type=kvm
+compute_driver=libvirt.LibvirtDriver
+instance_name_template=instance-%08x
+api_paste_config=/etc/nova/api-paste.ini
+
+# COMPUTE/APIS: if you have separate configs for separate services
+# this flag is required for both nova-api and nova-compute
+allow_resize_to_same_host=True
+
+# APIS
+osapi_compute_extension=nova.api.openstack.compute.contrib.standard_extensions
+ec2_dmz_host=162.105.133.146
+s3_host=162.105.133.146
+
+# RABBITMQ
+rabbit_host=162.105.133.146
+rpc_backend = nova.rpc.impl_kombu
+rabbit_max_retries=3
+rabbit_port=5672
+rabbit_retry_backoff=5
+rabbit_retry_interval=3
+
+# GLANCE
+image_service=nova.image.glance.GlanceImageService
+glance_api_servers=162.105.133.146:9292
+
+# NETWORK
+network_manager=nova.network.manager.FlatDHCPManager
+force_dhcp_release=True
+dhcpbridge = /usr/bin/nova-dhcpbridge
+dhcpbridge_flagfile=/etc/nova/nova.conf
+firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
+# Change my_ip to match each host
+my_ip=162.105.133.146
+public_interface=em2
+vlan_interface=em2
+flat_network_bridge=br100
+flat_interface=em2
+fixed_range=192.168.100.0/24
+
+# NOVNC CONSOLE
+novncproxy_base_url=http://162.105.133.146:6080/vnc_auto.html
+# Change vncserver_proxyclient_address and vncserver_listen to match each compute host
+vnc_enabled=true
+vncserver_proxyclient_address=162.105.133.146
+vnc_keymap=en-us
+vncserver_listen=162.105.133.146
+vncserver_proxyclient_address=162.105.133.146
+
+# AUTHENTICATION
+auth_strategy=keystone
+libvirt_inject_partition = -1
+[keystone_authtoken]
+auth_host = 127.0.0.1
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = nova
+admin_password = nova
+signing_dirname = /tmp/keystone-signing-nova
+（完）
+注意其中的lock_path，不知道为什么，如果这么启动了，network会报错，说permission denied，所以这里要手动创建lock_path并修改属主：
+mkdir /var/lock/nova
+chown -R nova:nova /var/lock/nova
+停止nova相关服务，否则当初始化数据库的时候会有error
+     for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc stop; chkconfig openstack-nova-$svc on; done
+初始化数据库（注意这里没有_）
+     nova-manage db sync
+此时会有一条debug信息，暂时不知道有什么影响：2013-03-11 14:07:27 19585 DEBUG nova.utils [-] backend <module 'nova.db.sqlalchemy.migration' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/migration.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
+重启所有nova相关服务
+     for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc restart; chkconfig openstack-nova-$svc on; done
+执行这一步的时候出现了很多错误，检查日志文件发现：
+rabbitmq有问题，官网的配置文件号称是在配置rabbitmq，但实际上配置文件里写的是qpid的，同时如果按照qpid来装又有很多问题，最后干脆装rabbitmq！（本配置文件已解决）
+compute有问题，有关libvirt的，需要另外安装几个东西（本配置文件已解决）
+network有问题，permission denied /var/lock/nova，用chown -R /var/lock/nova即可，如果没有这个路径则要手工创建（本配置文件已解决）
+volume有问题，这个是因为vg名字不是nova-volumes造成的（本配置文件已解决）
+执行nova-manage service list发现基本上都有错误。。。
+
+3. 配置计算虚拟机的网络
+     nova-manage network create private --fixed_range_v4=192.168.100.0/24 --bridge_interface=br100 --num_networks=1 --network_size=256
+这次采用另一个命令：
+     nova-manage network create public --fixed_range_v4=192.168.100.0/24 --num_networks=1 --network_size=256 --bridge=br100
+注：貌似bridge_interface和bridge这两个选项的含义不同
+执行这句会有一个debug信息：2013-03-11 16:56:37 DEBUG nova.utils [req-ac6bd88d-846c-4c35-9b33-af9b79254508 None None] backend <module 'nova.db.sqlalchemy.api' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/api.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
+暂时不知道会有什么影响
+
+4. 检查nova服务是否正常
+执行命令：
+     nova-manage service list
+ampq的问题：官网一开始是按照qpid配置的，但是后来的nova.conf文件使用的是rabbitmq，由于rabbitmq是openstack默认的配置，所以这里使用rabbitmq来，首先要安装rabbitmq
+     yum install -y rabbitmq-server
+     /etc/init.d/rabbitmq-server start
+然后修改nova.conf文件，增加rabbitmq的配置项：
+     rpc_backend = nova.openstack.common.rpc.impl_kombu
+     rabbit_host=162.105.133.146
+     rabbit_port=5672
+重启nova服务，等1分钟后，再查看就都没问题了
+/etc/lock/nova的权限问题：官网上的nova.conf文件里把lock_path设为了/var/lock/nova，但是不管我怎么调，总是权限有问题，索性按照他人的方法，把lock_path改为/var/lib/lock/nova，然后执行chown -R nova:nova /var/lib/lock/nova，修改权限即可（由此观之，用/var/lock/nova也未尝不可）
+
+
+## novnc配置
+yum install -y memcached mod-wgsi openstack-nova-novncproxy
+其余就是修改nova.conf文件，这里已经修改过了
+/etc/init.d/openstack-nova-consoleauth start
+/etc/init.d/openstack-nova-novncproxy start
+
+
+## 安装dashboard
+修改/etc/openstack-dashboard/local_settings
+创建数据库
+create database horizon;
+grant all privileges on horizon.* to horizon@'%' identified by 'horizon';
+grant all privileges on horizon.* to horizon@'localhost' identified by 'horizon';
+grant all privileges on horizon.* to horizon@'Ops146' identified by 'horizon';
+flush privileges;
+\q
+初始化表
+/usr/share/openstack-dashboard/manage.py syncdb
+启动http服务，此时还要对防火墙做一些设置，这里为了方便就直接关掉了
+service iptables off
+/etc/init.d/httpd start
+
+
+
+## 在controller节点上启动一个实例来检测功能是否正常
+在nova中添加secgroup，开放ssh和icmp
+nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
+nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
+添加mykey密钥对
+nova keypair-add mykey > oskey.priv
+在dashboard中launch一个instance，记得勾选密钥对
+登录即可：
+ssh -i oskey.pric root@192.168.100.2
+如果没有问题说明配置成功了！
 
 
 
