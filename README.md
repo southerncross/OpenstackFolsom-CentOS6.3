@@ -385,11 +385,11 @@ PS：脚本中所有endpoint地址都是127.0.0.1，此外用户名和密码也�
     # service openstack-glance-registry restart  
     
 ### 初始化glance库
-     glance-manage db_sync   
+    # glance-manage db_sync   
      
 ### 重启glance-registry和glance-api服务
-     service openstack-glance-registry restart   
-     service openstack-glance-api restart   
+    # service openstack-glance-registry restart   
+    # service openstack-glance-api restart   
 
 ### Troubleshooting   
 - 查看/var/log/glance路径下的各种log文件,确保没有ERROR  
@@ -419,7 +419,7 @@ PS：需要记住命令执行后返回的id，后面要用到
 PS：同样要记住命令执行后返回的id，后面要用到
 
 #### 加载image
-这里填入之前2步的id
+这里填入之前2步的id  
     # glance image-create --name="tty-linux" --is-public true --disk-format=ami --property kernel_id=cb77fbcf-89f4-441f-9ffb-47f3d045f445 --property ramdisk_id=e17e50b0-b7b3-474b-ac94-a861853bdb9b < ttylinux-uec-amd64-12.1_2.6.35-22_1.img 
 
 #### 验证   
@@ -430,160 +430,154 @@ PS：这里官方文档上的教程有误，其文档中在执行image-create的
 
 ## 配置管理器
 管理器分为KVM和Xen-based，KVM运行在libvirt上，Xen运行在XenAPI上   
-KVM是Compute服务默认的管理器（这里暂时只考虑KVM，其他的先不考虑）
-为了打开KVM支持，需要在/etc/nova/nova.conf中添加如下配置项： （后面提供的nova.conf配置文件已包含，这里不用配置） 
+KVM是Compute服务默认的管理器（这里暂时只考虑KVM，其他的先不考虑）  
+### 为了打开KVM支持，需要在/etc/nova/nova.conf中添加如下配置项 （后面提供的nova.conf配置文件已包含，这里不用配置）  
      compute_driver=libvirt.LibvirtDriver   
      libvirt_type=kvm   
-检查硬件是否支持虚拟化
-     egrep '(vmx|svm)' --color=always /proc/cpuinfo   
-检查是否加载KVM模块，如果输出中有kvm则说明已经加载
-     lsmod | grep kvm
-注意！这里的TroubleShooting需要运行一个实例才能得到结论，不过到目前为止还不知道如何运行一个实例，所以官方文档写的不太清楚
-安装libvirt的一些东西，如果不执行则libvirt无法启动：
-yum -y install avahi
-service messagebus start
-service avahi-daemon start
-service libvirtd start
+     
+### 检查硬件是否支持虚拟化（如果grep有结果则支持）
+    # egrep '(vmx|svm)' --color=always /proc/cpuinfo   
+     
+### 检查是否加载KVM模块（如果输出中有kvm则说明已经加载）  
+    # lsmod | grep kvm
+     
+### 安装libvirt的一些东西，如果不执行则libvirt无法启动
+    # yum -y install avahi
+    # service messagebus start
+    # service avahi-daemon start
+    # service libvirtd start
+PS：官方配置文档缺少这部分内容
 
 
-## 网络预配置
-1. 将网卡设置为混杂模式，这样就能接收到虚拟机发送的数据包了
-     ip link set em2 promisc on
-上一步的命令也可以用ifconfig em2 promisc来实现，执行完毕后用ifconfig em2检查是否包含PROMISC标志
-2. 创建网桥
-创建文件/etc/sysconfig/network-scrips/ifcfg-br100：
-     DEVICE=br100
-     TYPE=Bridge
-     ONBOOT=yes
-     DELAY=0
-     BOOTPROTO=static
-     IPADDR=192.168.100.1
-     NETMASK=255.255.255.0
-安装网桥工具
-     yum install bridge-utils
-建立网桥（官网上提到了，一定要先建立网桥）
-     brctl addbr br100
-重启使配置生效（这里官网写成networking了，应该是network）
-     /etc/init.d/network restart
+## 配置网络
+### 将网卡设置为混杂模式，这样就能接收到虚拟机发送的数据包了
+    # ifconfig em2 promisc  
+PS：这里网卡名是em2
+
+### 创建网桥
+#### 创建文件 */etc/sysconfig/network-scrips/ifcfg-br100*
+    DEVICE=br100
+    TYPE=Bridge
+    ONBOOT=yes
+    DELAY=0
+    BOOTPROTO=static
+    IPADDR=192.168.100.1
+    NETMASK=255.255.255.0
+    
+#### 安装网桥工具
+    # yum install bridge-utils
+    
+####建立网桥（官网上提到了，一定要先建立网桥）
+    # brctl addbr br100
+    
+#### 重启使配置生效
+    # /etc/init.d/network restart
+PS：这个命令官方文档写错了
 
 
-## 其他配置
-1. 确保/etc/qpidd.conf文件中auth=no
-2. 将selinux设置为许可模式
-     setenforce permissive
-3. 安装dnsmasq工具
-     yum install dnsmasq-utils
-4. 如果guest镜像没有单一的分区，则需要设置一下（这个不太明白）
-     openstack-config --set /etc/nova/nova.conf DEFAULT libvirt_inject_partition -1（后面提供的nova.conf文件已包含，这里不用执行）
+## 安装compute服务Nova
 
+### 将selinux设置为许可模式
+    # setenforce permissive
+    
+### 安装dnsmasq工具
+    # yum install dnsmasq-utils
 
-## 配置控制节点的SQL数据库
-进入SQL
-     mysql -uroot -p
-然后执行如下命令
-     CREATE DATABASE nova;
-     GRANT ALL ON nova.* TO 'nova'@'%' IDENTIFIED BY 'nova';
-     GRANT ALL ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'nova';
-     GRANT ALL ON nova.* TO 'nova'@'Ops146' IDENTIFIED BY 'nova';
-     quit
+### 配置控制节点的SQL数据库
+    # mysql -uroot -p
+    mysql> CREATE DATABASE nova;
+    mysql> GRANT ALL ON nova.* TO 'nova'@'%' IDENTIFIED BY 'nova';
+    mysql> GRANT ALL ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'nova';
+    mysql> GRANT ALL ON nova.* TO 'nova'@'Ops146' IDENTIFIED BY 'nova';
+    mysql> \q
 
+### 安装nova
+    # yum -y install openstack-nova
+    
+### 编辑 *nova.conf*  
+PS: nova.conf文件实在是太庞大了，这里直接给出一份nova.conf样例文件，并做注释
+    [DEFAULT]
+    
+    # LOGS/STATE
+    verbose=True
+    logdir=/var/log/nova
+    state_path=/var/lib/nova
+    lock_path=/var/lock/nova
+    rootwrap_config=/etc/nova/rootwrap.conf
+    
+    # SCHEDULER
+    compute_scheduler_driver=nova.scheduler.filter_scheduler.FilterScheduler
+    
+    # VOLUMES
+    volume_driver=nova.volume.driver.ISCSIDriver
+    volume_group=nova-volumes
+    volume_name_template=volume-%s
+    iscsi_helper=tgtadm
+    
+    # DATABASE
+    sql_connection=mysql://nova:nova@162.105.133.146/nova
+    
+    # COMPUTE
+    libvirt_type=kvm
+    compute_driver=libvirt.LibvirtDriver
+    instance_name_template=instance-%08x
+    api_paste_config=/etc/nova/api-paste.ini
 
-## 安装并配置Cloud Controller
-1. 安装nova
-     yum -y install openstack-nova
-2. 配置nova（nova.conf实在太庞大了）
-确保sql_connection=mysql://[user]:[pass]@[primary_ip]/[db name]，例如
-     sql_connection=mysql://nova:nova@162.105.133.146/nova
-添加如下配置项：
-auth_strategy=keystone
-network_manager=nova.network.manager.FlatDHCPManager
-fixed_range=192.168.100.0/24
-public_interface=em2
-flat_interface=em2
-flat_network_bridge=br100
-下面有一份nova.conf的样例：（注意要修改其中的ip以及password）
-[DEFAULT]
+    # COMPUTE/APIS: if you have separate configs for separate services
+    # this flag is required for both nova-api and nova-compute
+    allow_resize_to_same_host=True
+    
+    # APIS
+    osapi_compute_extension=nova.api.openstack.compute.contrib.standard_extensions
+    ec2_dmz_host=162.105.133.146
+    s3_host=162.105.133.146
+    
+    # RABBITMQ
+    rabbit_host=162.105.133.146
+    rpc_backend = nova.rpc.impl_kombu
+    rabbit_max_retries=3
+    rabbit_port=5672
+    rabbit_retry_backoff=5
+    rabbit_retry_interval=3
 
-# LOGS/STATE
-verbose=True
-logdir=/var/log/nova
-state_path=/var/lib/nova
-lock_path=/var/lock/nova
-rootwrap_config=/etc/nova/rootwrap.conf
+    # GLANCE
+    image_service=nova.image.glance.GlanceImageService
+    glance_api_servers=162.105.133.146:9292
+    
+    # NETWORK
+    network_manager=nova.network.manager.FlatDHCPManager
+    force_dhcp_release=True
+    dhcpbridge = /usr/bin/nova-dhcpbridge
+    dhcpbridge_flagfile=/etc/nova/nova.conf
+    firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
+    # Change my_ip to match each host
+    my_ip=162.105.133.146
+    public_interface=em2
+    vlan_interface=em2
+    flat_network_bridge=br100
+    flat_interface=em2
+    fixed_range=192.168.100.0/24
 
-# SCHEDULER
-compute_scheduler_driver=nova.scheduler.filter_scheduler.FilterScheduler
-
-# VOLUMES
-volume_driver=nova.volume.driver.ISCSIDriver
-volume_group=nova-volumes
-volume_name_template=volume-%s
-iscsi_helper=tgtadm
-
-# DATABASE
-sql_connection=mysql://nova:nova@162.105.133.146/nova
-
-# COMPUTE
-libvirt_type=kvm
-compute_driver=libvirt.LibvirtDriver
-instance_name_template=instance-%08x
-api_paste_config=/etc/nova/api-paste.ini
-
-# COMPUTE/APIS: if you have separate configs for separate services
-# this flag is required for both nova-api and nova-compute
-allow_resize_to_same_host=True
-
-# APIS
-osapi_compute_extension=nova.api.openstack.compute.contrib.standard_extensions
-ec2_dmz_host=162.105.133.146
-s3_host=162.105.133.146
-
-# RABBITMQ
-rabbit_host=162.105.133.146
-rpc_backend = nova.rpc.impl_kombu
-rabbit_max_retries=3
-rabbit_port=5672
-rabbit_retry_backoff=5
-rabbit_retry_interval=3
-
-# GLANCE
-image_service=nova.image.glance.GlanceImageService
-glance_api_servers=162.105.133.146:9292
-
-# NETWORK
-network_manager=nova.network.manager.FlatDHCPManager
-force_dhcp_release=True
-dhcpbridge = /usr/bin/nova-dhcpbridge
-dhcpbridge_flagfile=/etc/nova/nova.conf
-firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
-# Change my_ip to match each host
-my_ip=162.105.133.146
-public_interface=em2
-vlan_interface=em2
-flat_network_bridge=br100
-flat_interface=em2
-fixed_range=192.168.100.0/24
-
-# NOVNC CONSOLE
-novncproxy_base_url=http://162.105.133.146:6080/vnc_auto.html
-# Change vncserver_proxyclient_address and vncserver_listen to match each compute host
-vnc_enabled=true
-vncserver_proxyclient_address=162.105.133.146
-vnc_keymap=en-us
-vncserver_listen=162.105.133.146
-vncserver_proxyclient_address=162.105.133.146
-
-# AUTHENTICATION
-auth_strategy=keystone
-libvirt_inject_partition = -1
-[keystone_authtoken]
-auth_host = 127.0.0.1
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = nova
-admin_password = nova
-signing_dirname = /tmp/keystone-signing-nova
+    # NOVNC CONSOLE
+    novncproxy_base_url=http://162.105.133.146:6080/vnc_auto.html
+    # Change vncserver_proxyclient_address and vncserver_listen to match each compute host
+    vnc_enabled=true
+    vncserver_proxyclient_address=162.105.133.146
+    vnc_keymap=en-us
+    vncserver_listen=162.105.133.146
+    vncserver_proxyclient_address=162.105.133.146
+    
+    # AUTHENTICATION
+    auth_strategy=keystone
+    libvirt_inject_partition = -1
+    [keystone_authtoken]
+    auth_host = 127.0.0.1
+    auth_port = 35357
+    auth_protocol = http
+    admin_tenant_name = service
+    admin_user = nova
+    admin_password = nova
+    signing_dirname = /tmp/keystone-signing-nova
 （完）
 注意其中的lock_path，不知道为什么，如果这么启动了，network会报错，说permission denied，所以这里要手动创建lock_path并修改属主：
 mkdir /var/lock/nova
