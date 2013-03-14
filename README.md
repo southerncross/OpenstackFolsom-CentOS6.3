@@ -6,7 +6,7 @@
 
     # yum install -y ntp 
 
-### 修改/etc/ntp.conf文件，限定为中国地区的ntp服务器（[China — cn.pool.ntp.org]）
+### 修改 */etc/ntp.conf* 文件，限定为中国地区的ntp服务器（[China — cn.pool.ntp.org]）
 
 ### 启动ntp服务
 
