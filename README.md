@@ -15,6 +15,11 @@
 
 PS: 理想做法是控制节点与某个ntp服务器同步时间，计算节点向控制节点同步时间
 
+
+## 安装rabbitmq
+    # yum install -y rabbitmq-server
+    # /etc/init.d/rabbitmq-server start
+
 ## 安装MySQL
 
 ### 安装MySQL
@@ -494,8 +499,8 @@ PS：这个命令官方文档写错了
 ### 安装nova
     # yum -y install openstack-nova
     
-### 编辑 *nova.conf*  
-PS: nova.conf文件实在是太庞大了，这里直接给出一份nova.conf样例文件，并做注释
+### 编辑 *nova.conf*   
+PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直接用
     [DEFAULT]
     
     # LOGS/STATE
@@ -578,79 +583,242 @@ PS: nova.conf文件实在是太庞大了，这里直接给出一份nova.conf样�
     admin_user = nova
     admin_password = nova
     signing_dirname = /tmp/keystone-signing-nova
-（完）
-注意其中的lock_path，不知道为什么，如果这么启动了，network会报错，说permission denied，所以这里要手动创建lock_path并修改属主：
-mkdir /var/lock/nova
-chown -R nova:nova /var/lock/nova
-停止nova相关服务，否则当初始化数据库的时候会有error
-     for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc stop; chkconfig openstack-nova-$svc on; done
-初始化数据库（注意这里没有_）
-     nova-manage db sync
-此时会有一条debug信息，暂时不知道有什么影响：2013-03-11 14:07:27 19585 DEBUG nova.utils [-] backend <module 'nova.db.sqlalchemy.migration' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/migration.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
-重启所有nova相关服务
-     for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc restart; chkconfig openstack-nova-$svc on; done
-执行这一步的时候出现了很多错误，检查日志文件发现：
-rabbitmq有问题，官网的配置文件号称是在配置rabbitmq，但实际上配置文件里写的是qpid的，同时如果按照qpid来装又有很多问题，最后干脆装rabbitmq！（本配置文件已解决）
-compute有问题，有关libvirt的，需要另外安装几个东西（本配置文件已解决）
-network有问题，permission denied /var/lock/nova，用chown -R /var/lock/nova即可，如果没有这个路径则要手工创建（本配置文件已解决）
-volume有问题，这个是因为vg名字不是nova-volumes造成的（本配置文件已解决）
-执行nova-manage service list发现基本上都有错误。。。
 
-3. 配置计算虚拟机的网络
-     nova-manage network create private --fixed_range_v4=192.168.100.0/24 --bridge_interface=br100 --num_networks=1 --network_size=256
-这次采用另一个命令：
-     nova-manage network create public --fixed_range_v4=192.168.100.0/24 --num_networks=1 --network_size=256 --bridge=br100
-注：貌似bridge_interface和bridge这两个选项的含义不同
-执行这句会有一个debug信息：2013-03-11 16:56:37 DEBUG nova.utils [req-ac6bd88d-846c-4c35-9b33-af9b79254508 None None] backend <module 'nova.db.sqlalchemy.api' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/api.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
+PS：注意其中的lock_path，不知道为什么，如果这么启动了，network会报错，说permission denied，所以这里要手动创建lock_path并修改属主：
+    # mkdir /var/lock/nova
+    # chown -R nova:nova /var/lock/nova
+    
+### 停止nova相关服务，否则初始化数据库的时候可能会有error
+    # for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc stop; chkconfig openstack-nova-$svc on; done
+    
+### 初始化数据库（注意这里没有_）
+     nova-manage db sync
+此时会有一条debug信息，暂时不知道有什么影响
+    2013-03-11 14:07:27 19585 DEBUG nova.utils [-] backend <module 'nova.db.sqlalchemy.migration' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/migration.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
+    
+### 重启所有nova相关服务
+    # for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc restart; chkconfig openstack-nova-$svc on; done
+执行这一步的时候也许会报下面几种错误  
+    - rabbitmq问题，官网的配置文件号称是在配置rabbitmq，但实际上配置文件里写的是qpid的，同时如果按照qpid来装又有很多问题，最后干脆装rabbitmq！（本配置文件已解决）
+    - compute问题，有关libvirt的，需要另外安装几个东西（本配置文件已解决）
+    - network问题，permission denied /var/lock/nova，用chown -R /var/lock/nova即可，如果没有这个路径则要手工创建（本配置文件已解决）
+    - volume问题，这个是因为vg名字不是nova-volumes造成的（本配置文件已解决）
+### 验证
+    # nova-manage service list
+确保所有的service都是笑脸
+
+    #service --status-all
+确保除meta之外的openstack相关服务都是running状态
+
+## 配置虚拟网络
+    # nova-manage network create public --fixed_range_v4=192.168.100.0/24 --num_networks=1 --network_size=256 --bridge=br100
+PS：貌似bridge_interface和bridge这两个选项的含义不同，因此官方配置文档上这条命令有误
+
+执行这句会有一个debug信息
+    2013-03-11 16:56:37 DEBUG nova.utils [req-ac6bd88d-846c-4c35-9b33-af9b79254508 None None] backend <module 'nova.db.sqlalchemy.api' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/api.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
 暂时不知道会有什么影响
 
-4. 检查nova服务是否正常
-执行命令：
-     nova-manage service list
-ampq的问题：官网一开始是按照qpid配置的，但是后来的nova.conf文件使用的是rabbitmq，由于rabbitmq是openstack默认的配置，所以这里使用rabbitmq来，首先要安装rabbitmq
-     yum install -y rabbitmq-server
-     /etc/init.d/rabbitmq-server start
-然后修改nova.conf文件，增加rabbitmq的配置项：
-     rpc_backend = nova.openstack.common.rpc.impl_kombu
-     rabbit_host=162.105.133.146
-     rabbit_port=5672
-重启nova服务，等1分钟后，再查看就都没问题了
-/etc/lock/nova的权限问题：官网上的nova.conf文件里把lock_path设为了/var/lock/nova，但是不管我怎么调，总是权限有问题，索性按照他人的方法，把lock_path改为/var/lib/lock/nova，然后执行chown -R nova:nova /var/lib/lock/nova，修改权限即可（由此观之，用/var/lock/nova也未尝不可）
-
-
 ## novnc配置
-yum install -y memcached mod-wgsi openstack-nova-novncproxy
-其余就是修改nova.conf文件，这里已经修改过了
-/etc/init.d/openstack-nova-consoleauth start
-/etc/init.d/openstack-nova-novncproxy start
+    # yum install -y memcached mod-wgsi openstack-nova-novncproxy
+PS：其余就是修改nova.conf文件，之前的nova.conf已经修改过了
+    /etc/init.d/openstack-nova-consoleauth start
+    /etc/init.d/openstack-nova-novncproxy start
 
 
 ## 安装dashboard
-修改/etc/openstack-dashboard/local_settings
-创建数据库
-create database horizon;
-grant all privileges on horizon.* to horizon@'%' identified by 'horizon';
-grant all privileges on horizon.* to horizon@'localhost' identified by 'horizon';
-grant all privileges on horizon.* to horizon@'Ops146' identified by 'horizon';
-flush privileges;
-\q
-初始化表
-/usr/share/openstack-dashboard/manage.py syncdb
-启动http服务，此时还要对防火墙做一些设置，这里为了方便就直接关掉了
-service iptables off
-/etc/init.d/httpd start
+### 修改/etc/openstack-dashboard/local_settings
+    import os
+    
+    from django.utils.translation import ugettext_lazy as _
+    
+    DEBUG = False
+    TEMPLATE_DEBUG = DEBUG
+    # TODO
+    USE_SSL = False
+    
+    # Set SSL proxy settings:
+    # For Django 1.4+ pass this header from the proxy after terminating the SSL,
+    # and don't forget to strip it from the client's request.
+    # For more information see:
+    # https://docs.djangoproject.com/en/1.4/ref/settings/#secure-proxy-ssl-header
+    # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTOCOL', 'https')
 
+    # Specify a regular expression to validate user passwords.
+    # HORIZON_CONFIG = {
+    #     "password_validator": {
+    #         "regex": '.*',
+    #         "help_text": _("Your password does not meet the requirements.")
+    #     },
+    #    'help_url': "http://docs.openstack.org"
+    # }
+    
+    LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
+    # TODO
+    # We need to change this to mysql, instead of sqlite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': 'horizon',
+            'USER': 'horizon',
+            'PASSWORD': 'horizon',
+            'HOST': '162.105.133.146',
+            'PORT': '3306',
+        },
+    }
+    
+    # Set custom secret key:
+    # You can either set it to a specific value or you can let horizion generate a
+    # default secret key that is unique on this machine, e.i. regardless of the
+    # amount of Python WSGI workers (if used behind Apache+mod_wsgi): However, there
+    # may be situations where you would want to set this explicitly, e.g. when
+    # multiple dashboard instances are distributed on different machines (usually
+    # behind a load-balancer). Either you have to make sure that a session gets all
+    # requests routed to the same dashboard instance or you set the same SECRET_KEY
+    # for all of them.
+    # from horizon.utils import secret_key
+    # SECRET_KEY = secret_key.generate_or_read_from_file(os.path.join(LOCAL_PATH, '.secret_key_store'))
+    
+    # We recommend you use memcached for development; otherwise after every reload
+    # of the django development server, you will have to login again. To use
+    # memcached set CACHE_BACKED to something like 'memcached://127.0.0.1:11211/'
+    CACHE_BACKEND = 'memcached://127.0.0.1:11211/'
 
+    # Send email to the console by default
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    # Or send them to /dev/null
+    #EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
+    
+    # Configure these for your outgoing email host
+    # EMAIL_HOST = 'smtp.my-company.com'
+    # EMAIL_PORT = 25
+    # EMAIL_HOST_USER = 'djangomail'
+    # EMAIL_HOST_PASSWORD = 'top-secret!'
+    
+    # For multiple regions uncomment this configuration, and add (endpoint, title).
+    # AVAILABLE_REGIONS = [
+    #     ('http://cluster1.example.com:5000/v2.0', 'cluster1'),
+    #     ('http://cluster2.example.com:5000/v2.0', 'cluster2'),
+    # ]
+    
+    # TODO
+    OPENSTACK_HOST = "162.105.133.146"
+    OPENSTACK_KEYSTONE_URL = "http://%s:5000/v2.0" % OPENSTACK_HOST
+    OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
+    
+    # Disable SSL certificate checks (useful for self-signed certificates):
+    # OPENSTACK_SSL_NO_VERIFY = True
+    
+    # The OPENSTACK_KEYSTONE_BACKEND settings can be used to identify the
+    # capabilities of the auth backend for Keystone.
+    # If Keystone has been configured to use LDAP as the auth backend then set
+    # can_edit_user to False and name to 'ldap'.
+    #
+    # TODO(tres): Remove these once Keystone has an API to identify auth backend.
+    OPENSTACK_KEYSTONE_BACKEND = {
+        'name': 'native',
+        'can_edit_user': True
+    }
+
+    OPENSTACK_HYPERVISOR_FEATURES = {
+        'can_set_mount_point': True
+    }
+    
+    # OPENSTACK_ENDPOINT_TYPE specifies the endpoint type to use for the endpoints
+    # in the Keystone service catalog. Use this setting when Horizon is running
+    # external to the OpenStack environment. The default is 'internalURL'.
+    #OPENSTACK_ENDPOINT_TYPE = "publicURL"
+    
+    # The number of objects (Swift containers/objects or images) to display
+    # on a single page before providing a paging element (a "more" link)
+    # to paginate results.
+    API_RESULT_LIMIT = 1000
+    API_RESULT_PAGE_SIZE = 20
+    
+    # The timezone of the server. This should correspond with the timezone
+    # of your entire OpenStack installation, and hopefully be in UTC.
+    TIME_ZONE = "UTC"
+    
+    LOGGING = {
+            'version': 1,
+            # When set to True this will disable all logging except
+            # for loggers specified in this configuration dictionary. Note that
+            # if nothing is specified here and disable_existing_loggers is True,
+            # django.db.backends will still log unless it is disabled explicitly.
+            'disable_existing_loggers': False,
+            'handlers': {
+                'null': {
+                    'level': 'DEBUG',
+                    'class': 'django.utils.log.NullHandler',
+                },
+                'console': {
+                    # Set the level to "DEBUG" for verbose output logging.
+                'level': 'INFO',
+                    'class': 'logging.StreamHandler',
+                },
+             },
+            'loggers': {
+            # Logging from django.db.backends is VERY verbose, send to null
+            # by default.
+                'django.db.backends': {
+                    'handlers': ['null'],
+                    'propagate': False,
+                },
+                'horizon': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                },
+                'openstack_dashboard': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                },
+                'novaclient': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                },
+                'keystoneclient': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                },
+                'glanceclient': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                },
+                'nose.plugins.manager': {
+                    'handlers': ['console'],
+                    'propagate': False,
+                }
+            }
+    }
+
+### 创建数据库
+    # mysql -uroot -p
+    mysql> create database horizon;
+    mysql> grant all privileges on horizon.* to horizon@'%' identified by 'horizon';
+    mysql> grant all privileges on horizon.* to horizon@'localhost' identified by 'horizon';
+    mysql> grant all privileges on horizon.* to horizon@'Ops146' identified by 'horizon';
+    mysql> flush privileges;
+    mysql> \q
+    
+### 初始化表
+    # /usr/share/openstack-dashboard/manage.py syncdb
+    
+### 启动http服务，此时还要对防火墙做一些设置，这里为了方便就直接关掉了
+    # service iptables off
+    # /etc/init.d/httpd start
+    
 ## 在controller节点上启动一个实例来检测功能是否正常
-在nova中添加secgroup，开放ssh和icmp
-nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
-nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
-添加mykey密钥对
-nova keypair-add mykey > oskey.priv
-在dashboard中launch一个instance，记得勾选密钥对
-登录即可：
-ssh -i oskey.pric root@192.168.100.2
+### 在nova中添加secgroup，开放ssh和icmp
+    # nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
+    # nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
+    
+### 添加mykey密钥对
+    # nova keypair-add mykey > oskey.priv
+    
+### 在dashboard中launch一个instance，记得勾选密钥对
+
+### 登录
+    # ssh -i oskey.pric root@192.168.100.2
 如果没有问题说明配置成功了！
 
 
