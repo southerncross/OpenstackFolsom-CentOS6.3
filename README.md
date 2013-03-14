@@ -80,7 +80,7 @@ PS：这里假设控制节点的IP是162.105.133.146，口令须与之前数据�
     # keystone-manage db_sync 
 
 ### 创建各种tenants，users，roles   
-此步涉及大量重复工作，如果人工执行命令很不人道，所以使用官方脚本：
+此步涉及大量重复工作，如果人工执行命令很不人道，所以使用官方脚本[sample_data.sh]：
 
     #!/usr/bin/env bash
     
@@ -306,9 +306,9 @@ PS：这里假设控制节点的IP是162.105.133.146，口令须与之前数据�
 PS：脚本中所有endpoint地址都是127.0.0.1，此外用户名和密码也是默认的，建议修改后再执行
 
 ### troubleshooting   
-- 随便执行几个keystone命令，比如: keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://162.105.133.146:35357/v2.0 token-get   
-- 查看/var/log/keystone/路径下的日志文件（如果没有开启debug选项的话此时应该是空）
-- 如果日志有异常可以在命令中增加-debug选项查看debug信息   
+    - 随便执行几个keystone命令，比如: keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://162.105.133.146:35357/v2.0 token-get   
+    - 查看/var/log/keystone/路径下的日志文件（如果没有开启debug选项的话此时应该是空）
+    - 如果日志有异常可以在命令中增加-debug选项查看debug信息   
 
 ### 为便于运行keystone命令，可以创建一个keystonerc文件一次性导入所需环境变量，内容如下：
     export OS_USERNAME=admin   
@@ -397,8 +397,8 @@ PS：脚本中所有endpoint地址都是127.0.0.1，此外用户名和密码也�
     # service openstack-glance-api restart   
 
 ### Troubleshooting   
-- 查看/var/log/glance路径下的各种log文件,确保没有ERROR  
-- 随意执行几个glance命令，例如：glance image-list
+    - 查看/var/log/glance路径下的各种log文件,确保没有ERROR  
+    - 随意执行几个glance命令，例如：glance image-list
 
 ### 进一步验证image服务是否正常 
 
@@ -424,8 +424,8 @@ PS：需要记住命令执行后返回的id，后面要用到
 PS：同样要记住命令执行后返回的id，后面要用到
 
 #### 加载image
-这里填入之前2步的id  
     # glance image-create --name="tty-linux" --is-public true --disk-format=ami --property kernel_id=cb77fbcf-89f4-441f-9ffb-47f3d045f445 --property ramdisk_id=e17e50b0-b7b3-474b-ac94-a861853bdb9b < ttylinux-uec-amd64-12.1_2.6.35-22_1.img 
+这里填入之前2步的id
 
 #### 验证   
     # glance image-list  
@@ -596,13 +596,15 @@ PS：注意其中的lock_path，不知道为什么，如果这么启动了，net
 此时会有一条debug信息，暂时不知道有什么影响
     2013-03-11 14:07:27 19585 DEBUG nova.utils [-] backend <module 'nova.db.sqlalchemy.migration' from '/usr/lib/python2.6/site-packages/nova/db/sqlalchemy/migration.pyc'> __get_backend /usr/lib/python2.6/site-packages/nova/utils.py:502
     
-### 重启所有nova相关服务
+### 重启所有nova相关服务  
     # for svc in api objectstore compute network volume scheduler cert consoleauth console; do service openstack-nova-$svc restart; chkconfig openstack-nova-$svc on; done
-执行这一步的时候也许会报下面几种错误  
+执行这一步的时候也许会报下面几种错误    
+
     - rabbitmq问题，官网的配置文件号称是在配置rabbitmq，但实际上配置文件里写的是qpid的，同时如果按照qpid来装又有很多问题，最后干脆装rabbitmq！（本配置文件已解决）
     - compute问题，有关libvirt的，需要另外安装几个东西（本配置文件已解决）
     - network问题，permission denied /var/lock/nova，用chown -R /var/lock/nova即可，如果没有这个路径则要手工创建（本配置文件已解决）
     - volume问题，这个是因为vg名字不是nova-volumes造成的（本配置文件已解决）
+    
 ### 验证
     # nova-manage service list
 确保所有的service都是笑脸
@@ -823,3 +825,5 @@ PS：其余就是修改nova.conf文件，之前的nova.conf已经修改过了
 
 
 
+[China — cn.pool.ntp.org]: http://www.pool.ntp.org/zone/cn
+[sample_data.sh]: https://github.com/openstack/keystone/blob/master/tools/sample_data.sh
