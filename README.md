@@ -46,12 +46,6 @@ PS：实际安装步骤会有些许差别
     
 PS: 理想做法是控制节点与某个ntp服务器同步时间，计算节点向控制节点同步时间
 
-
-### 安装rabbitmq
-
-    # yum install -y rabbitmq-server
-    # /etc/init.d/rabbitmq-server start
-
 ### 安装MySQL
 
     # yum install mysql mysql-server MySQL-python  
@@ -70,7 +64,7 @@ PS: 安装过程中需要设置root账户密码，建议设为Ops146
     mysql> FLUSH PRIVILEGES; 
     mysql> \q
     
-### 安装RabbitMQ
+### 安装RabbitMQ和cache服务
 
     # yum install openstack-utils memcached
     # yum install -y rabbitmq-server
