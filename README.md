@@ -5,7 +5,6 @@
 ### 配置环境
 
     - 操作系统CentOS6.3
-    - IP地址162.105.133.146
     - 所有操作都是在root账户下进行
 
 ### 安装流程
@@ -95,7 +94,7 @@ PS：openstack对数据库的初始化操作有专门的指令，例如：
 
 修改 */etc/keystone/keystone.conf*
 
-    connection = mysql://keystone:keystone@162.105.133.146/keystone   
+    connection = mysql://keystone:keystone@Ops146/keystone   
     
 PS：这里假设控制节点的IP是162.105.133.146，口令须与之前数据库授权时的口令相同，这里使用了默认值
 
@@ -341,7 +340,7 @@ PS：脚本中所有endpoint地址都是127.0.0.1，此外用户名和密码也�
 
 troubleshooting   
 
-    - 随便执行几个keystone命令，比如: keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://162.105.133.146:35357/v2.0 token-get   
+    - 随便执行几个keystone命令，比如: keystone --os-username=admin --os-password=Ops146 --os-auth-url=http://Ops146:35357/v2.0 token-get   
     - 查看/var/log/keystone/路径下的日志文件（如果没有开启debug选项的话此时应该是空）
     - 如果日志有异常可以在命令中增加-debug选项查看debug信息   
 
@@ -350,7 +349,7 @@ troubleshooting
     export OS_USERNAME=admin   
     export OS_PASSWORD=Ops146   
     export OS_TENANT_NAME=demo   
-    export OS_AUTH_URL=http://162.105.133.146:35357/v2.0
+    export OS_AUTH_URL=http://Ops146:35357/v2.0
 
 ### 安装和配置ImageService
 
@@ -398,7 +397,7 @@ troubleshooting
      
 确保 */etc/glance/glance-api.conf* 指向MySQL而不是sqlite   
 
-     sql_connection = mysql://glance:glance@162.105.133.146/glance   
+     sql_connection = mysql://glance:glance@Ops146/glance   
      
 更新 */etc/glance/glance-registry.conf* 最后一段，通过设置flavor=keystone来启用认证服务   
 
@@ -427,7 +426,7 @@ troubleshooting
      
 确保 */etc/glance/glance-registry.conf* 指向的是MySQL而不是sqlite：
 
-     sql_connection = mysql://glance:glance@162.105.133.146/glance 
+     sql_connection = mysql://glance:glance@Ops146/glance 
      
 重启glance服务使配置生效
 
@@ -461,7 +460,7 @@ Troubleshooting
     export OS_USERNAME=admin   
     export OS_TENANT_NAME=demo   
     export OS_PASSWORD=Ops146   
-    export OS_AUTH_URL=http://162.105.133.146:5000/v2.0/   
+    export OS_AUTH_URL=http://Ops146:5000/v2.0/   
     export OS_REGION_NAME=RegionOne   
      
 加载kernel  
@@ -601,7 +600,7 @@ PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直�
     iscsi_helper=tgtadm
     
     # DATABASE
-    sql_connection=mysql://nova:nova@162.105.133.146/nova
+    sql_connection=mysql://nova:nova@Ops146/nova
     
     # COMPUTE
     libvirt_type=kvm
@@ -615,11 +614,11 @@ PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直�
     
     # APIS
     osapi_compute_extension=nova.api.openstack.compute.contrib.standard_extensions
-    ec2_dmz_host=162.105.133.146
-    s3_host=162.105.133.146
+    ec2_dmz_host=Ops146
+    s3_host=Ops146
     
     # RABBITMQ
-    rabbit_host=162.105.133.146
+    rabbit_host=Ops146
     rpc_backend = nova.rpc.impl_kombu
     rabbit_max_retries=3
     rabbit_port=5672
@@ -628,7 +627,7 @@ PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直�
 
     # GLANCE
     image_service=nova.image.glance.GlanceImageService
-    glance_api_servers=162.105.133.146:9292
+    glance_api_servers=Ops146:9292
     
     # NETWORK
     network_manager=nova.network.manager.FlatDHCPManager
@@ -637,7 +636,7 @@ PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直�
     dhcpbridge_flagfile=/etc/nova/nova.conf
     firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
     # Change my_ip to match each host
-    my_ip=162.105.133.146
+    my_ip=Ops146
     public_interface=em2
     vlan_interface=em2
     flat_network_bridge=br100
@@ -645,13 +644,13 @@ PS: 这个nova.conf样例文件是在官方的样例上修改而来，可以直�
     fixed_range=192.168.100.0/24
 
     # NOVNC CONSOLE
-    novncproxy_base_url=http://162.105.133.146:6080/vnc_auto.html
+    novncproxy_base_url=http://Ops146:6080/vnc_auto.html
     # Change vncserver_proxyclient_address and vncserver_listen to match each compute host
     vnc_enabled=true
-    vncserver_proxyclient_address=162.105.133.146
+    vncserver_proxyclient_address=Ops146
     vnc_keymap=en-us
-    vncserver_listen=162.105.133.146
-    vncserver_proxyclient_address=162.105.133.146
+    vncserver_listen=Ops146
+    vncserver_proxyclient_address=Ops146
     
     # AUTHENTICATION
     auth_strategy=keystone
@@ -764,7 +763,7 @@ PS：其余就是修改nova.conf文件，之前的nova.conf已经修改过了
             'NAME': 'horizon',
             'USER': 'horizon',
             'PASSWORD': 'horizon',
-            'HOST': '162.105.133.146',
+            'HOST': 'Ops146',
             'PORT': '3306',
         },
     }
@@ -804,7 +803,7 @@ PS：其余就是修改nova.conf文件，之前的nova.conf已经修改过了
     # ]
     
     # TODO
-    OPENSTACK_HOST = "162.105.133.146"
+    OPENSTACK_HOST = "Ops146"
     OPENSTACK_KEYSTONE_URL = "http://%s:5000/v2.0" % OPENSTACK_HOST
     OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
     
