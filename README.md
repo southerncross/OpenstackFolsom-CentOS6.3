@@ -922,7 +922,11 @@ PS：其余就是修改nova.conf文件，之前的nova.conf已经修改过了
 
     # nova keypair-add mykey > oskey.priv
     
-在dashboard中launch一个instance，记得勾选密钥对
+在dashboard中launch一个instance，记得勾选密钥对或者手动执行命令
+
+    # nova boot tty01 --flavor 2 --key_name mykey --image 0407c34d-058f-4640-a28f-4991c920ade6
+
+PS：某个节点上第一次launch实例的时候由于配置网络的，会BUILD一段时间。以后再launch其他实例就很快了。
 
 登录
 
